@@ -1,0 +1,11 @@
+tạo models
+makemigrations and migrate
+đăng nhập admin
+tạo superuser
+thêm dữ liệu
+xử lý view
+den phut 50
+video 3
+Sử dụng custom attribute trong html
+
+phần 3 (video 4) xử lý session
