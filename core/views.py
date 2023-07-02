@@ -1,25 +1,70 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from .models import *
 import json
 import datetime
 from django.views.decorators.csrf import csrf_exempt
-from .utils import cookieCart
+from .utils import cookieCart, cartData, guestOrder
+from .forms import LoginForm, RegisterForm
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+
+
+def loginPage(request):
+
+    if request.user.is_authenticated:
+        return redirect('store')
+
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('store')
+
+    form = LoginForm()
+    context = {'form': form}
+    return render(request, 'core/login.html', context)
+
+
+def registerPage(request):
+    if request.method == 'POST':
+        form = RegisterForm(request.POST)
+        if form.is_valid():
+            form.save()
+            authenticated_user = authenticate(
+                request, 
+                username=request.POST.get('username'),
+                password=request.POST.get('password1')
+            )
+            customer = Customer.objects.create(
+                user=authenticated_user,
+                name=request.POST.get('username'),
+                email=request.POST.get('email')
+            )
+            customer.save()
+            
+            login(request, authenticated_user)
+            return redirect('store')
+    else:
+        form = RegisterForm()
+    context = {'form': form}
+    return render(request, 'core/register.html', context)
+
+
+@login_required(login_url='login')
+def logoutPage(request):
+    logout(request)
+    return redirect('store')
 
 
 def store(request):
 
-    if request.user.is_authenticated:
-        customer = request.user.customer
-        order, created = Order.objects.get_or_create(customer=customer, complete=False)
-    
-        items = order.orderitem_set.all()
-        cartItems = order.get_cart_items
-    else:
-        cookieData = cookieCart(request)
-        cartItems = cookieData['cartItems']
-        order = cookieData['order']
-        items = cookieData['items']
+    data = cartData(request)
+
+    cartItems = data['cartItems']
     
     products = Product.objects.all()
     context = {'products': products, 'cartItems': cartItems}
@@ -27,75 +72,24 @@ def store(request):
 
 
 def cart(request):
-    if request.user.is_authenticated:
-        customer = request.user.customer
-        order, created = Order.objects.get_or_create(customer=customer, complete=False)
-        # orderitem là model OrderItem: Order: 1 OrderItem: nhieu
-        items = order.orderitem_set.all()
-        cartItems = order.get_cart_items
-    else:
-        try:
-            cart = json.loads(request.COOKIES['cart'])
-            
-        except:
-            cart = {}
-        print('Cart:', cart)
-        items = []
-        order = {
-            'get_cart_total': 0,
-            'get_cart_items': 0,
-            'shipping': False
-        }
-        cartItems = order['get_cart_items']
+    data = cartData(request)
 
-        for i in cart:
-            # try except xử lý trường hợp khi thêm sản phẩm rồi và sau đó đặt hàng sản phẩm đó
-            # nhưng sau đó xóa sản phẩm trong database
-            try:
-                cartItems += cart[i]['quantity']
-
-                product = Product.objects.get(id=i)
-                total = (product.price * cart[i]['quantity'])
-
-                order['get_cart_total'] += total
-                order['get_cart_items'] += cart[i]['quantity']
-
-                item = {
-                    'product': {
-                        'id': product.id,
-                        'name': product.name,
-                        'price': product.price,
-                        'imageURL': product.imageURL
-                    },
-                    'quantity': cart[i]['quantity'],
-                    'get_total': total,
-                }
-                items.append(item)
-
-                if product.digital == False:
-                    order['shipping'] = True
-            except:
-                pass
+    cartItems = data['cartItems']
+    order = data['order']
+    items = data['items']
 
     context = {'items': items, 'order': order, 'cartItems': cartItems}
     return render(request, 'core/cart.html', context)
 
 
-@csrf_exempt
+
 def checkout(request):
-    if request.user.is_authenticated:
-        customer = request.user.customer
-        order, created = Order.objects.get_or_create(customer=customer, complete=False)
-        items = order.orderitem_set.all()
-        cartItems = order.get_cart_items
-    else:
-        order = {
-            'get_cart_total': 0,
-            'get_cart_items': 0,
-            'shipping': False
-        }
-        items = []
-        cartItems = order['get_cart_items']
+    data = cartData(request)
+
+    cartItems = data['cartItems']
+    order = data['order']
+    items = data['items']
+    
     context = {'items': items, 'order': order, 'cartItems': cartItems}
     return render(request, 'core/checkout.html', context)
 
@@ -127,6 +121,8 @@ def updateItem(request):
     return JsonResponse('Item was added', safe=False)
 
 
+# Solution 1: To Fix CSRF_TOKEN
+@csrf_exempt
 def processOrder(request):
     print('Data:', request.body)
     transaction_id = datetime.datetime.now().timestamp()
@@ -135,25 +131,26 @@ def processOrder(request):
     if request.user.is_authenticated:
         customer = request.user.customer
         order, created = Order.objects.get_or_create(customer=customer, complete=False)
-        total = float(data['form']['total'])
-        order.transaction_id = transaction_id
-
-        if total == order.get_cart_total:
-            order.complete = True
-        order.save()
-
-        if order.shipping == True:
-            ShippingAddress.objects.create(
-                customer=customer,
-                order=order,
-                address=data['shipping']['address'],
-                city=data['shipping']['city'],
-                state=data['shipping']['state'],
-                zipcode=data['shipping']['zipcode']
-            )
 
     else:
-        print('User is not logged in...')
+        customer, order = guestOrder(request, data)
+
+    total = float(data['form']['total'])
+    order.transaction_id = transaction_id
+
+    if total == order.get_cart_total:
+        order.complete = True
+    order.save()
+
+    if order.shipping == True:
+        ShippingAddress.objects.create(
+            customer=customer,
+            order=order,
+            address=data['shipping']['address'],
+            city=data['shipping']['city'],
+            state=data['shipping']['state'],
+            zipcode=data['shipping']['zipcode']
+        )
 
     return JsonResponse('Payment submitted...', safe=False)
 

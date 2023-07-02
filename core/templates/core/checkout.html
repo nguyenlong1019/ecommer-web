@@ -6,6 +6,7 @@
     <div class="col-lg-6">
         <div class="box-element" id="form-wrapper">
             <form id="form">
+            <!-- // Solution 2: To Fix CSRF_TOKEN -->
             {% csrf_token %}
                 <div id="user-info">
                     <div class="form-field">
@@ -89,8 +90,9 @@
 
     var form = document.getElementById('form');
 
-    csrftoken = form.getElementsByTagName("input")[0].value;
-    console.log('New token:', form.getElementsByTagName("input")[0].value);
+    // Solution 2: To Fix CSRF_TOKEN
+    // csrftoken = form.getElementsByTagName("input")[0].value;
+    // console.log('New token:', form.getElementsByTagName("input")[0].value);
 
     form.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -150,6 +152,11 @@
         .then((data) => {
             console.log('Success:', data);
             alert('Transaction completed');
+
+            // sau khi đặt hàng thì xóa hết cookie trong đơn hàng
+            cart = {};
+            document.cookie = 'cart=' + JSON.stringify(cart) + ";domain=;path=/";
+
             window.location.href = "{% url 'store' %}";
         })
     }
