@@ -27,7 +27,13 @@ SECRET_KEY = 'django-insecure-)s=apd*4hmgpkhzih8*du4os4$i#0rapew+%sk8iottv0bfo9@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = ["https://ecom-web-tql5.onrender.com"]
+
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+CSRF_TRUSTED_ORIGINS = ["https://ecom-web-tql5.onrender.com"]
 
 
 # Application definition
