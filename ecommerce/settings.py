@@ -139,3 +139,6 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
+if not DEBUG:
+    MEDIA_URL = 'https://ecom-web-tql5.onrender.com/media/'
+    MEDIA_ROOT = 'https://ecom-web-tql5.onrender.com/media/'
